@@ -13,9 +13,10 @@ module NLP.Punkt.Match (
 
 import Data.Text (Text)
 import Data.Array ((!))
-import "regex-tdfa-text" Text.Regex.TDFA.Text (compile)
-import "regex-tdfa" Text.Regex.TDFA (Regex, matchOnceText, blankCompOpt,
-                                     ExecOption(..))
+import Text.Regex.Base
+import Text.Regex.TDFA.Text
+import Text.Regex.TDFA
+import Text.Regex.Base.RegexLike
 import Data.Either (lefts)
 
 re_split_impl :: Regex -> Text -> [Either Text Text]

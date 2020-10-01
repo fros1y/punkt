@@ -1,5 +1,5 @@
 name: punkt
-version: 0.1.1
+version: 0.1.2
 synopsis: Multilingual unsupervised sentence tokenization with Punkt.
 description: Multilingual unsupervised sentence tokenization with Punkt.
 license: MIT
@@ -15,13 +15,13 @@ library
     exposed-modules: NLP.Punkt, NLP.Punkt.Match
 
     build-depends:
-        base >= 4 && < 5,
+        base >= 4.11 && < 10,
         mtl,
         unordered-containers,
         array,
         text,
-        regex-tdfa,
-        regex-tdfa-text
+        regex-base,
+        regex-tdfa
 
     hs-source-dirs: lib
     default-language: Haskell2010
