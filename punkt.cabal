@@ -21,7 +21,8 @@ library
         array,
         text,
         regex-base,
-        regex-tdfa
+        regex-tdfa,
+        store
 
     hs-source-dirs: lib
     default-language: Haskell2010

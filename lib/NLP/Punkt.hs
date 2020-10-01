@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module NLP.Punkt where
 
 import qualified Data.Text as Text
 import GHC.Generics
 import Data.Text (Text)
+import Data.Store
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.HashMap.Strict (HashMap)
 import Data.Char (isLower, isAlpha, isSpace)
@@ -29,7 +31,7 @@ data OrthoFreq = OrthoFreq {
     freq_after_ender :: Int
     -- ^ number of occurences in the first position
     }
-    deriving (Show, Generic)
+    deriving (Show, Generic, Store)
 
 -- | Represents training data obtained from a corpus required by Punkt.
 data PunktData = PunktData {
@@ -42,10 +44,10 @@ data PunktData = PunktData {
     total_enders :: Int,
     total_toks :: Int
     }
-    deriving (Show, Generic)
+    deriving (Show, Generic, Store)
 
 data Entity a = Word a Bool | Punct a | ParaStart | Ellipsis | Dash
-    deriving (Eq, Show, Generic)
+    deriving (Eq, Show, Generic, Store)
 
 data Token = Token {
     offset :: Int,
@@ -54,7 +56,7 @@ data Token = Token {
     sentend :: Bool,
     abbrev :: Bool
     }
-    deriving (Show, Generic)
+    deriving (Show, Generic, Store)
 
 type Punkt = Reader.Reader PunktData
 
