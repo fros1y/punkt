@@ -34,7 +34,7 @@ test-suite punkt-tests
     main-is: Main.hs
 
     build-depends:
-        base >= 4 && < 5,
+        base >= 4 && < 10,
         mtl,
         text,
         punkt,
