@@ -23,7 +23,8 @@ library
         regex-base,
         regex-tdfa,
         store,
-        streamly
+        streamly,
+        transformers
 
     hs-source-dirs: lib
     default-language: Haskell2010

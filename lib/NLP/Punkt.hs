@@ -6,27 +6,21 @@ module NLP.Punkt where
 
 import qualified Data.Text as Text
 import GHC.Generics
+import Data.Function ((&))
 import Data.Text (Text)
-import Data.Store
-import Data.Maybe (catMaybes, fromMaybe)
+import Control.Monad.IO.Class ( MonadIO )
+import Data.Store ( Store )
+import Data.Maybe (catMaybes, fromMaybe, fromJust)
 import Data.HashMap.Strict (HashMap)
 import Data.Char (isLower, isAlpha, isSpace)
 import qualified Data.HashMap.Strict as Map
-import qualified Data.List as List
-import Control.Applicative ((<$>), (<*>), (<|>))
+import Control.Applicative ((<|>))
 import qualified Control.Monad.Reader as Reader
-
-import Streamly (SerialT, asyncly, aheadly)
-import Streamly.Internal.Data.Fold (Fold)
-import Streamly.Internal.Data.Unfold (Unfold)
+import Streamly (SerialT)
+import System.IO (Handle)
 
 import qualified Streamly as S
 import qualified Streamly.Prelude as S
-import qualified Streamly.Data.Unfold as UF
-import qualified Streamly.Data.Fold as FL
-import qualified Streamly.Memory.Array as A
-import qualified Streamly.Network.Socket as SK
-import qualified Streamly.Network.Inet.TCP as TCP
 
 import NLP.Punkt.Match (re_split_pos, word_seps)
 
@@ -190,8 +184,8 @@ prob_colloc w_ x_ = dunning_log <$> freq_type w_ <*> freq_type x_
                                 <*> ask_colloc w_ x_ <*> ask_total_toks
 
 -- | Builds a dictionary of textual type frequencies from a stream of tokens.
-build_type_count :: [Token] -> HashMap Text Int
-build_type_count = List.foldl' update initcount
+buildTypeCount :: (Monad m, Num v) => SerialT m Token -> m (HashMap Text v)
+buildTypeCount = S.foldl' update initcount
     where
     initcount = Map.singleton "." 0
 
@@ -206,9 +200,8 @@ build_type_count = List.foldl' update initcount
     -- TODO: catch possible abbreviations wrapped in hyphenated and apostrophe
     -- forms in lexer
 
-build_ortho_count :: [Token] -> HashMap Text OrthoFreq
-build_ortho_count toks = List.foldl' update Map.empty $
-                            zip (dummy : toks) toks
+buildOrthoCount :: Monad m => SerialT m Token -> m (HashMap Text OrthoFreq)
+buildOrthoCount toks = S.foldl' update Map.empty $ S.zipWith (,) (dummy `S.cons` toks) toks
     where
     dummy = Token 0 0 (Word " " False) True False
     -- hack: add dummy to process first token
@@ -230,12 +223,20 @@ build_ortho_count toks = List.foldl' update Map.empty $
                    && not (is_initial prev)
     update ctr _ = ctr
 
-build_collocs :: [Token] -> HashMap (Text, Text) Int
-build_collocs toks = List.foldl' update Map.empty $ zip toks (drop 1 toks)
-    where
-    update ctr (Token {entity=(Word u _)}, Token {entity=(Word v _)}) =
-        Map.insertWith (+) (norm u, norm v) 1 ctr
-    update ctr _ = ctr
+buildCollocs :: (Monad m, Num v) => SerialT m Token -> m (HashMap (Text, Text) v)
+buildCollocs toks = do
+    offsetTokens <- fromJust <$> S.tail toks
+    let
+        offsetStream = S.zipWith (,) toks offsetTokens
+        update ctr (Token {entity=(Word u _)}, Token {entity=(Word v _)}) = Map.insertWith (+) (norm u, norm v) 1 ctr
+        update ctr _ = ctr
+    S.foldl' update Map.empty offsetStream 
+
+readCorpus :: (S.IsStream t, MonadIO m) => Handle -> t m Text
+readCorpus handle = S.fromHandle handle & S.filter (/= "") & S.map Text.pack -- & S.concatMap to_tokens  --S.repeatM (Text.hGetLine handle) & S.filter (/= "") & S.map to_tokens
+
+toTokens :: (S.IsStream t, Monad m) => t m Text -> t m Token
+toTokens linesOfText = S.concatMap (S.fromList . to_tokens) linesOfText
 
 to_tokens :: Text -> [Token]
 to_tokens corpus = catMaybes . map (either tok_word add_delim) $
@@ -260,17 +261,22 @@ to_tokens corpus = catMaybes . map (either tok_word add_delim) $
 
     len = Text.length
 
-build_punkt_data :: [Token] -> PunktData
-build_punkt_data toks = PunktData typecnt orthocnt collocs nender totes
-    where
-    typecnt = build_type_count toks
-    temppunkt = PunktData typecnt Map.empty Map.empty 0 (length toks)
-    refined = runPunkt temppunkt $ mapM classify_by_type toks
-    orthocnt = build_ortho_count refined
-    collocs = build_collocs refined
-    nender = length . filter (sentend . fst) $ zip (dummy : refined) refined
-    dummy = Token 0 0 (Word " " False) True False
-    totes = length $ filter is_word toks
+runClassification :: PunktData -> Token -> Token
+runClassification tempPunkt token = runPunkt tempPunkt $ classify_by_type token
+
+buildPunktData :: Monad m => SerialT m Token -> m PunktData
+buildPunktData toks = do
+    lengthToks <- S.length toks
+    typeCnt <- buildTypeCount toks
+    let tempPunkt = PunktData typeCnt Map.empty Map.empty 0 lengthToks
+        dummy = Token 0 0 (Word " " False) True False
+        refined = S.map (runClassification tempPunkt) toks
+    orthocnt <- buildOrthoCount refined
+    collocs <- buildCollocs refined
+    nender <- S.length . S.filter (sentend . fst) $ S.zipWith (,) (dummy `S.cons` refined) refined
+    totes <- S.length $ S.filter is_word toks    
+    pure $ PunktData typeCnt orthocnt collocs nender totes
+
 
 classify_by_type :: Token -> Punkt Token
 classify_by_type tok@(Token {entity=(Word w True)}) = do
@@ -296,18 +302,18 @@ classify_by_next this (Token _ _ (Word next _) _ _)
             Just bool -> this { sentend = bool }
 classify_by_next this _ = return this
 
-classify_punkt :: Text -> [Token]
-classify_punkt corpus = runPunkt (build_punkt_data toks) $ do
+classify_punkt :: PunktData -> Text -> [Token]
+classify_punkt model corpus = runPunkt model $ do
     abbrd <- mapM classify_by_type toks
     final <- Reader.zipWithM classify_by_next abbrd (drop 1 abbrd)
     return $ final ++ [last toks]
     where toks = to_tokens corpus
 
-find_breaks :: Text -> [(Int, Int)]
-find_breaks corpus = slices_from endpairs 0
+find_breaks :: PunktData -> Text -> [(Int, Int)]
+find_breaks model corpus = slices_from endpairs 0
     where
     pairs_of xs = zip xs $ drop 1 xs
-    endpairs = filter (sentend . fst) . pairs_of $ classify_punkt corpus
+    endpairs = filter (sentend . fst) . pairs_of $ classify_punkt model corpus
 
     -- TODO: make this less convoluted
     slices_from [] n = [(n, Text.length corpus)]
@@ -328,9 +334,9 @@ match_spaces w = Text.findIndex isSpace w >>= \p ->
 
 -- | Main export of the entire package. Splits a corpus into its constituent
 -- sentences.
-split_sentences :: Text -> [Text]
-split_sentences corpus = map (uncurry $ substring corpus) slices
-    where slices = find_breaks corpus
+split_sentences :: PunktData -> Text -> [Text]
+split_sentences model corpus = map (uncurry $ substring corpus) slices
+    where slices = find_breaks model corpus
 
 -- | @runPunkt data computation@ runs @computation@ using @data@ collected from
 -- a corpus using 'build_punkt_data'.
