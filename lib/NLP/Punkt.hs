@@ -239,8 +239,13 @@ readCorpus handle limit = case limit of
     where 
         linesFromFile = S.fromHandle handle & S.filter (/= "") & S.map Text.pack -- & S.concatMap to_tokens  --S.repeatM (Text.hGetLine handle) & S.filter (/= "") & S.map to_tokens
 
+notEmpty :: Token -> Bool
+notEmpty token = case entity token of
+  Word word _ -> word /= ""
+  _ -> True
+
 toTokens :: (S.IsStream t, Monad m) => t m Text -> t m Token
-toTokens linesOfText = S.concatMap (S.fromList . to_tokens) linesOfText
+toTokens linesOfText = S.filter notEmpty $ S.concatMap (S.fromList . to_tokens) linesOfText
 
 to_tokens :: Text -> [Token]
 to_tokens corpus = catMaybes . map (either tok_word add_delim) $
