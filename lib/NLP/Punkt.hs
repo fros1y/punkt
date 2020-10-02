@@ -232,8 +232,12 @@ buildCollocs toks = do
         update ctr _ = ctr
     S.foldl' update Map.empty offsetStream 
 
-readCorpus :: (S.IsStream t, MonadIO m) => Handle -> t m Text
-readCorpus handle = S.fromHandle handle & S.filter (/= "") & S.map Text.pack -- & S.concatMap to_tokens  --S.repeatM (Text.hGetLine handle) & S.filter (/= "") & S.map to_tokens
+readCorpus :: (S.IsStream t, MonadIO m) => Handle -> Maybe Int -> t m Text
+readCorpus handle limit = case limit of 
+    Nothing -> linesFromFile
+    Just limit' -> S.take limit' $ linesFromFile 
+    where 
+        linesFromFile = S.fromHandle handle & S.filter (/= "") & S.map Text.pack -- & S.concatMap to_tokens  --S.repeatM (Text.hGetLine handle) & S.filter (/= "") & S.map to_tokens
 
 toTokens :: (S.IsStream t, Monad m) => t m Text -> t m Token
 toTokens linesOfText = S.concatMap (S.fromList . to_tokens) linesOfText
