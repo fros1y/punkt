@@ -16,45 +16,57 @@ import qualified Data.List as List
 import Control.Applicative ((<$>), (<*>), (<|>))
 import qualified Control.Monad.Reader as Reader
 
+import Streamly (SerialT, asyncly, aheadly)
+import Streamly.Internal.Data.Fold (Fold)
+import Streamly.Internal.Data.Unfold (Unfold)
+
+import qualified Streamly as S
+import qualified Streamly.Prelude as S
+import qualified Streamly.Data.Unfold as UF
+import qualified Streamly.Data.Fold as FL
+import qualified Streamly.Memory.Array as A
+import qualified Streamly.Network.Socket as SK
+import qualified Streamly.Network.Inet.TCP as TCP
+
 import NLP.Punkt.Match (re_split_pos, word_seps)
 
 -- | Carries various orthographic statistics for a particular textual type.
 data OrthoFreq = OrthoFreq {
-    freq_lower :: Int,
+    freq_lower :: !Int,
     -- ^ number of lowercase occurrences
-    freq_upper :: Int,
+    freq_upper :: !Int,
     -- ^ uppercase occurrences
-    freq_first_lower :: Int,
+    freq_first_lower :: !Int,
     -- ^ number of lowercase occurrences in the first position of a sentence
-    freq_internal_upper :: Int,
+    freq_internal_upper :: !Int,
     -- ^ number of uppercase occurrences strictly internal to a sentence
-    freq_after_ender :: Int
+    freq_after_ender :: !Int
     -- ^ number of occurences in the first position
     }
     deriving (Show, Generic, Store)
 
 -- | Represents training data obtained from a corpus required by Punkt.
 data PunktData = PunktData {
-    type_count :: HashMap Text Int,
+    type_count :: !(HashMap Text Int),
     -- ^ Occurrences of each textual type, case-insensitive. Used during Punkt's
     -- type-based stage. Also contains occurrences of trailing periods.
-    ortho_count :: HashMap Text OrthoFreq,
+    ortho_count :: !(HashMap Text OrthoFreq),
     -- ^ Dictionary of orthographic data for each textual type.
-    collocations :: HashMap (Text, Text) Int,
-    total_enders :: Int,
-    total_toks :: Int
+    collocations :: !(HashMap (Text, Text) Int),
+    total_enders :: !Int,
+    total_toks :: !Int
     }
     deriving (Show, Generic, Store)
 
-data Entity a = Word a Bool | Punct a | ParaStart | Ellipsis | Dash
+data Entity a = Word !a Bool | Punct !a | ParaStart | Ellipsis | Dash
     deriving (Eq, Show, Generic, Store)
 
 data Token = Token {
-    offset :: Int,
-    toklen :: Int,
-    entity :: Entity Text,
-    sentend :: Bool,
-    abbrev :: Bool
+    offset :: !Int,
+    toklen :: !Int,
+    entity :: !(Entity Text),
+    sentend :: !Bool,
+    abbrev :: !Bool
     }
     deriving (Show, Generic, Store)
 
