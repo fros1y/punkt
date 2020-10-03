@@ -24,7 +24,10 @@ library
         regex-tdfa,
         store,
         streamly,
-        transformers
+        transformers,
+        lens,
+        record-hasfield,
+        generic-lens
 
     hs-source-dirs: lib
     default-language: Haskell2010
