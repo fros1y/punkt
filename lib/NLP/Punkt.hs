@@ -8,21 +8,21 @@
 module NLP.Punkt where
 
 import Control.Applicative ((<|>))
-import Streamly.Internal.Data.List
-import Control.Lens
+import Control.Lens ( (&), (^.), (%~) )
+import qualified Data.HashMap.Strict as HM
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Control.Monad.Reader as Reader
 import Data.Char (isAlpha, isLower, isSpace)
-import Data.Generics.Labels
-import Data.Generics.Product.Fields
-import Data.HashMap.Strict (HashMap, unionWith)
+import Data.Generics.Labels ()
+import Data.Generics.Product.Fields ()
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
 import Data.Maybe (catMaybes, fromJust, fromMaybe)
 import Data.Store (Store)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import GHC.Generics
+import GHC.Generics ( Generic )
 import NLP.Punkt.Match (re_split_pos, word_seps)
 import Streamly (SerialT)
 import qualified Streamly as S
@@ -58,6 +58,16 @@ data PunktData = PunktData
     totalToks :: !Int
   }
   deriving (Show, Generic, Store)
+
+prunePunktData :: PunktData -> PunktData
+prunePunktData punktData = punktData &
+                              #typeCount %~ pruneHashMap &
+                              #orthoCount %~ pruneOrthoCount &
+                              #collocations %~ pruneHashMap where
+  pruneHashMap = HM.filter (> 1)
+  pruneOrthoCount = HM.filter validOrtho
+  validOrtho ortho = 0 < ortho ^. #freqLower + ortho ^. #freqUpper + ortho ^. #freqFirstLower + ortho ^. #freqInternalUpper + ortho ^. #freqAfterEnder
+ 
 
 data Entity a = Word !a Bool | Punct !a | ParaStart | Ellipsis | Dash
   deriving (Eq, Show, Generic, Store)
@@ -289,7 +299,7 @@ prob_abbr w_ =
 -- | Decides if @w@ is a sentence ender based on its capitalization.
 -- Case-insensitive.
 decide_ortho :: Text -> Punkt (Maybe Bool)
-decide_ortho w_ = ask_ortho w_ >>= return . decide' w_
+decide_ortho word = ask_ortho word >>= return . decide' word
   where
     decide' w_ wortho
       | title && ever_lower && never_title_internal = Just True
