@@ -27,12 +27,13 @@ library
         transformers,
         lens,
         record-hasfield,
-        generic-lens
+        generic-lens,
+        fusion-plugin
 
     hs-source-dirs: lib
     default-language: Haskell2010
 
-    ghc-options: -O3 -Wall
+    ghc-options: -O3 -Wall -fdicts-strict -fmax-worker-args=16 -fspec-constr-recursive=16 -fplugin=Fusion.Plugin
 
 test-suite punkt-tests
     type: exitcode-stdio-1.0
